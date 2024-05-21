@@ -335,23 +335,29 @@ def train(
 
     for i, samples in enumerate(progress):
         # get hypothesis for sequence level training
-        if generator is not None:
-            # get N-best hypos
-            for sample in samples:
-                sample_tmp, is_dummy_batch = trainer._prepare_sample(sample)
-                hypos = task.inference_step(
-                    generator,
-                    [trainer.get_model()],
-                    sample_tmp,
-                    prefix_tokens=None,
-                    constraints=None,
-                )
-                sample["hypos"] = hypos
+        # if generator is not None:
+        #     # get N-best hypos (it works)
+        #     for sample in samples:
+        #         # if 'net_input' not in sample:
+        #         #     print('samples:', samples)
+        #         #     raise ValueError('error', sample)
+        #         sample_tmp, is_dummy_batch = trainer._prepare_sample(sample)
+        #         hypos = task.inference_step(
+        #             generator,
+        #             [trainer.get_model()],
+        #             sample_tmp,
+        #             prefix_tokens=None,
+        #             constraints=None,
+        #         )
+        #         sample["hypos"] = hypos
 
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
-            log_output = trainer.train_step(samples)
+            if generator is not None:
+                log_output = trainer.train_step(samples, generator=generator)
+            else:
+                log_output = trainer.train_step(samples)
 
         if log_output is not None:  # not OOM, overflow, ...
             # log mid-epoch stats

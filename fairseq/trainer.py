@@ -794,7 +794,7 @@ class Trainer(object):
         self._dummy_batch = batch
 
     @metrics.aggregate("train")
-    def train_step(self, samples, raise_oom=False):
+    def train_step(self, samples, raise_oom=False, generator=None):
         """Do forward, backward and parameter update."""
         self._set_seed()
         self.model.train()
@@ -816,6 +816,9 @@ class Trainer(object):
         logging_outputs, sample_size, ooms = [], 0, 0
         for i, sample in enumerate(samples):  # delayed update loop
             sample, is_dummy_batch = self._prepare_sample(sample)
+            # check if we should skip this batch
+            if 'net_input' not in sample:
+                continue
 
             def maybe_no_sync():
                 """
@@ -839,6 +842,22 @@ class Trainer(object):
 
             try:
                 with maybe_no_sync():
+                    if generator is not None:
+                        # get N-best hypos (it works)
+                        sample['net_input']['src_tokens'] = sample['net_input']['src_tokens'].to(self.device)
+                        sample['net_input']['src_lengths'] = sample['net_input']['src_lengths'].to(self.device)
+                        sample['net_input']['prev_output_tokens'] = sample['net_input']['prev_output_tokens'].to(self.device)
+                        sample['id'] = sample['id'].to(self.device)
+
+                        hypos = self.task.inference_step(
+                            generator,
+                            [self.model],
+                            sample,
+                            prefix_tokens=None,
+                            constraints=None,
+                        )
+                        sample["hypos"] = hypos
+
                     # forward and backward
                     loss, sample_size_i, logging_output = self.task.train_step(
                         sample=sample,
